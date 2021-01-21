@@ -24,8 +24,14 @@ def gen_y():
     return np.log(2 * u) if u < 1 / 2 else -np.log(2 - 2 * u)
 
 
-pdf_x = lambda x: np.exp(-(x ** 2) / 2) / np.sqrt(2 * np.pi)
-pdf_y = lambda x: np.exp(-np.abs(x)) / 2
+def pdf_x(x):
+    return np.exp(-(x ** 2) / 2) / np.sqrt(2 * np.pi)
+
+
+def pdf_y(x):
+    return np.exp(-np.abs(x)) / 2
+
+
 f_ratio = (2 * np.e / np.pi) ** 0.5
 
 ar_x = np.arange(-4, 4.1, 0.1)
