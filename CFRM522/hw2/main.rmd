@@ -1,0 +1,173 @@
+---
+output:
+  pdf_document: default
+---
+
+```{r, results = 'hide', message=F, warning=F}
+library(quantmod)
+library(quantstrat)
+setwd("~/git/homework-uw/CFRM522/hw2")
+```
+
+# Part I
+
+```{r, results = 'hide', message=F, warning=F}
+NG <- read.table("NaturalGas.csv", TRUE, ",")
+NG <- xts(
+  NG[c("Open", "High", "Low", "Close")], as.Date(NG$Date, format="%d-%b-%y")
+)
+strAcco <- strPort <- strStra <- "ClenowOneOpt"
+rm.strat(strStra)
+strategy(strStra, store = TRUE)
+add.indicator(strStra, "SMA", list(x = Cl(NG), n = 10), label = "SMA_fast")
+add.indicator(strStra, "SMA", list(x = Cl(NG), n = 100), label = "SMA_slow")
+add.signal(
+  strStra, "sigCrossover",
+  list(columns = c("SMA_fast", "SMA_slow"), relationship = "gte"),
+  label = "long"
+)
+add.signal(
+  strStra, "sigCrossover",
+  list(columns = c("SMA_fast", "SMA_slow"), relationship = "lt"),
+  label = "short"
+)
+add.rule(
+  strStra, "ruleSignal",
+  list(
+    sigcol = "long", sigval = TRUE, orderside = "long", ordertype = "market",
+    orderqty = 15, TxnFees = 0, replace = FALSE
+  ),
+  type = "enter", label = "EnterLong"
+)
+add.rule(
+  strStra, "ruleSignal",
+  list(
+    sigcol = "short", sigval = TRUE, orderside = "short", ordertype = "market",
+    orderqty = -15, TxnFees = 0, replace = FALSE
+  ),
+  type = "enter", label = "EnterShort"
+)
+add.rule(
+  strStra, "ruleSignal",
+  list(
+    sigcol = "short", sigval = TRUE, orderside = "long", ordertype = "market",
+    orderqty = "all", TxnFees = 0, replace = TRUE
+  ),
+  type = "exit", label = "ExitLong"
+)
+add.rule(
+  strStra, "ruleSignal",
+  list(
+    sigcol = "long", sigval = TRUE, orderside = "short", ordertype = "market",
+    orderqty = "all", TxnFees = 0, replace = TRUE
+  ),
+  type = "exit", label = "ExitShort"
+)
+
+strCurrency <- "USD"
+strSymbol <- "NG"
+currency(strCurrency)
+future(strSymbol, strCurrency, 1e4, 0.01)
+initPortf(strPort, strSymbol)
+initAcct(strAcco, strPort, initEq = 1e6)
+initOrders(strPort)
+applyStrategy(strStra, strPort)
+updatePortf(strPort)
+updateAcct(strAcco)
+updateEndEq(strAcco)
+```
+
+```{r}
+tradeStats(strPort, strSymbol)
+chart.Posn(strPort)
+```
+
+# Part II, rough tuning
+
+```{r, results = 'hide', message=F, warning=F}
+myHeatMap <- function(
+  metric, paramOne, paramTwo, metricTitle, paramOneTitle, paramTwoTitle
+) {
+  z <- tapply(metric, list(paramOne, paramTwo), mean)
+  x <- as.numeric(rownames(z))
+  y <- as.numeric(colnames(z))
+  filled.contour(
+    x, y, z, color = heat.colors, xlab = paramOneTitle, ylab = paramTwoTitle
+  )
+  title(metricTitle)
+}
+add.distribution(
+  strStra, "sma", "indicator", "SMA_fast", list(n = seq(0, 24, 6)),
+  label = "fast"
+)
+add.distribution(
+  strStra, "sma", "indicator", "SMA_slow", list(n = seq(50, 250, 25)),
+  label = "slow"
+)
+add.distribution.constraint(strStra, "sma", "fast", "slow", "<", "sma")
+res <- apply.paramset(strStra, "sma", strPort, account.st = strAcco)
+myHeatMap(
+  res$tradeStats$Profit.To.Max.Draw, res$tradeStats$fast, res$tradeStats$slow,
+  "Profit.To.Max.Draw", "Fast", "Slow"
+)
+myHeatMap(
+  res$tradeStats$Net.Trading.PL, res$tradeStats$fast, res$tradeStats$slow,
+  "Net.Trading.PL", "Fast", "Slow"
+)
+myHeatMap(
+  res$tradeStats$Max.Drawdown, res$tradeStats$fast, res$tradeStats$slow,
+  "Max.Drawdown", "Fast", "Slow"
+)
+```
+
+All of the three plots suggest two peaks around same regions, while the metric `Profit.To.Max.Draw` provides the best distinction. Among the two peaks, the one located around (fast, slow)$=(0, 170)$ is more robuster, i.e.\ the metric does not decay significantly while (fast, slow) varying around its proximity.
+
+In the next section, we will generate a heat map of `Profit.To.Max.Draw` around the selected region at a finer granularity.
+
+# Part II, precise tuning
+
+```{r, results = 'hide', message=F, warning=F}
+add.distribution(
+  strStra, "sma", "indicator", "SMA_fast", list(n = seq(0, 9)), label = "fast"
+)
+add.distribution(
+  strStra, "sma", "indicator", "SMA_slow", list(n = seq(155, 190)),
+  label = "slow"
+)
+res <- apply.paramset(strStra, "sma", strPort, account.st = strAcco)
+myHeatMap(
+  res$tradeStats$Profit.To.Max.Draw, res$tradeStats$fast, res$tradeStats$slow,
+  "Profit.To.Max.Draw", "Fast", "Slow"
+)
+```
+
+According to this plot, we choose the most robust point (fast, slow)$=(2, 168)$.
+
+In the next section, we will rerun the backtest with the selected parameters.
+
+# Part II, backtest
+
+```{r, results = 'hide', message=F, warning=F}
+add.indicator(strStra, "SMA", list(x = Cl(NG), n = 2), label = "SMA_fast")
+add.indicator(strStra, "SMA", list(x = Cl(NG), n = 168), label = "SMA_slow")
+strAcco <- strPort <- "bazinga"
+initPortf(strPort, strSymbol)
+initAcct(strAcco, strPort, initEq = 1e6)
+initOrders(strPort)
+applyStrategy(strStra, strPort)
+updatePortf(strPort)
+updateAcct(strAcco)
+updateEndEq(strAcco)
+```
+
+```{r}
+tradeStats(strPort, strSymbol)
+chart.Posn(strPort)
+```
+
+The strategy is significantly improved since the following metrics are improved.
+
+|          | Net.Trading.PL | Avg.Trade.PL | Ann.Sharpe | Max.Drawdown |
+|----------|---------------:|-------------:|-----------:|-------------:|
+| (10,100) |        -378000 |     -4265.73 | -0.4466245 |     -2476200 |
+|  (2,168) |        1574850 |     11911.63 |  1.6006510 |     -1312350 |

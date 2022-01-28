@@ -1,0 +1,102 @@
+---
+output:
+  pdf_document: default
+---
+
+# a
+
+```{r, message=FALSE}
+library(quantmod)
+library(quantstrat)
+strSymbol <- "SPY"
+getSymbols(strSymbol, from = "2001-05-01", to = "2021-04-30", adjust = TRUE)
+```
+
+# b
+
+```{r, message=FALSE}
+head(SPY)
+tail(SPY)
+```
+
+# c
+
+```{r, message=FALSE}
+chart_Series(SPY, TA = "add_SMA(10); add_SMA(100); add_Vo()")
+chart_Series(SPY, TA = "add_SMA(10); add_SMA(100); add_Vo()", subset = "20200401--20210401")
+```
+
+# d
+
+```{r, message=FALSE}
+osFixedDollar <- function(timestamp, orderside, tradeSize, ...) {
+    price <- as.numeric(Ad(mktdata[timestamp]))
+    orderqty <- round(tradeSize / price, -2)
+    if (orderside == "short")
+        orderqty <- -orderqty
+    orderqty
+}
+
+strAcco <- strPort <- strStra <- "bazinga"
+rm.strat(strStra)
+strategy(strStra, store = TRUE)
+add.indicator(strStra, "SMA", list(x = quote(Ad(SPY)), n = 10), label = "SMA_fast")
+add.indicator(strStra, "SMA", list(x = quote(Ad(SPY)), n = 100), label = "SMA_slow")
+add.signal(strStra, "sigCrossover", list(columns = c("SMA_fast", "SMA_slow"),
+    relationship = "gte"), label = "long")
+add.signal(strStra, "sigCrossover", list(columns = c("SMA_fast", "SMA_slow"), relationship = "lt"),
+    label = "short")
+add.rule(strStra, "ruleSignal", list(sigcol = "long", sigval = TRUE, orderside = "long",
+    ordertype = "market", TxnFees = 0, replace = FALSE, osFUN = osFixedDollar), type = "enter",
+    label = "EnterLong")
+add.rule(strStra, "ruleSignal", list(sigcol = "short", sigval = TRUE, orderside = "short",
+    ordertype = "market", TxnFees = 0, replace = FALSE, osFUN = osFixedDollar), type = "enter",
+    label = "EnterShort")
+add.rule(strStra, "ruleSignal", list(sigcol = "short", sigval = TRUE, orderside = "long",
+    ordertype = "market", orderqty = "all", TxnFees = 0, replace = TRUE), type = "exit",
+    label = "ExitLong")
+add.rule(strStra, "ruleSignal", list(sigcol = "long", sigval = TRUE, orderside = "short",
+    ordertype = "market", orderqty = "all", TxnFees = 0, replace = TRUE), type = "exit",
+    label = "ExitShort")
+```
+
+# e
+
+```{r, message=FALSE}
+strCurrency <- "USD"
+currency(strCurrency)
+stock(strSymbol, strCurrency)
+initPortf(strPort, strSymbol)
+initAcct(strAcco, strPort, initEq = 1e6)
+initOrders(strPort)
+applyStrategy(strStra, strPort, tradeSize = 5e5)
+head(mktdata)
+tail(mktdata)
+```
+
+# f
+
+```{r, message=FALSE}
+updatePortf(strPort)
+updateAcct(strAcco)
+updateEndEq(strAcco)
+```
+
+# g
+
+```{r, message=FALSE}
+tradeStats(strPort, strSymbol)
+```
+
+# h
+
+```{r, message=FALSE}
+perTradeStats(strPort, strSymbol)
+```
+
+# i
+
+```{r, message=FALSE}
+chart.Posn(strPort, TA = "add_SMA(10); add_SMA(100, col = 'blue')")
+chart.Posn(strPort, TA = "add_SMA(10); add_SMA(100, col = 'blue')", Dates = "20200401--20210401")
+```
